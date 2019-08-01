@@ -13,22 +13,23 @@ class TodoListViewController: UITableViewController {
     
     var itemArray = [Item]()
     
+    var selectedCategory : Category? {
+        didSet {
+            loadItems()
+        }
+    }
+    
     let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
     
     @IBOutlet var todoTableView: UITableView!
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        
-        //print(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask))
-        
-        loadItems()
-        
+    
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "ToDoItemCell")
     }
     
-    
-    //MARK: - Tableview Delegate Methods
+    //MARK: - Tableview Datasource Methods
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         
         let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for: indexPath)
@@ -47,11 +48,13 @@ class TodoListViewController: UITableViewController {
         return itemArray.count
     }
     
+    //MARK: - Tableview Delegate Methods
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         
         let item = itemArray[indexPath.row]
         
         item.done = !item.done
+        
         
         // context.delete(item)
         // itemArray.remove(at: indexPath.row)
@@ -61,7 +64,6 @@ class TodoListViewController: UITableViewController {
         tableView.deselectRow(at: indexPath, animated: true)
         
     }
-    
     
     //MARK: - Add New Items
     @IBAction func addButtonPressed(_ sender: UIBarButtonItem) {
@@ -77,6 +79,7 @@ class TodoListViewController: UITableViewController {
             
             newItem.title = textField.text!
             newItem.done = false
+            newItem.parentCategory = self.selectedCategory
             
             self.itemArray.append(newItem)
             
@@ -96,27 +99,36 @@ class TodoListViewController: UITableViewController {
         
     }
     
-    
     //MARK: - Model Manupulation Methods
     func saveItems() {
         
         do {
             try context.save()
         } catch {
-            print("Error saving context \(error)")
+            print("Error saving item \(error)")
         }
         
         tableView.reloadData()
     }
     
-    func loadItems(with request: NSFetchRequest<Item> = Item.fetchRequest()) {
+    func loadItems(with request: NSFetchRequest<Item> = Item.fetchRequest(), predicate: NSPredicate? = nil) {
+        
+        let categoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
+        
+        if let additionalPredicate = predicate {
+            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, additionalPredicate])
+        } else {
+            request.predicate = categoryPredicate
+        }
+        
         
         do {
             itemArray = try context.fetch(request)
         } catch {
-            print("Error reading context \(error)")
+            print("Error loading items \(error)")
         }
         
+        tableView.reloadData()
     }
     
 }
@@ -127,11 +139,11 @@ extension TodoListViewController: UISearchBarDelegate {
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
         let request : NSFetchRequest<Item> = Item.fetchRequest()
         
-        request.predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
+        let predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
         
         request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
         
-        loadItems(with: request)
+        loadItems(with: request, predicate: predicate)
         
         tableView.reloadData()
     }
@@ -144,6 +156,8 @@ extension TodoListViewController: UISearchBarDelegate {
                 searchBar.resignFirstResponder()
             }
         }
+        
+        tableView.reloadData()
     }
     
     
